@@ -1,0 +1,105 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Probe WarrantyWave API health",
+			"type": "shell",
+			"command": "curl.exe",
+			"args": [
+				"-i",
+				"--max-time",
+				"5",
+				"http://localhost:8080/actuator/health"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Probe registration validation",
+			"type": "shell",
+			"command": "curl.exe",
+			"args": [
+				"-i",
+				"--max-time",
+				"5",
+				"-H",
+				"Content-Type: application/json",
+				"-d",
+				"{}",
+				"http://localhost:8080/api/auth/register"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Check local backend health",
+			"type": "shell",
+			"command": "Invoke-WebRequest",
+			"args": [
+				"-UseBasicParsing",
+				"-Uri",
+				"http://localhost:8080/actuator/health",
+				"-TimeoutSec",
+				"5"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Inspect API validation response",
+			"type": "shell",
+			"command": "Invoke-WebRequest",
+			"args": [
+				"-UseBasicParsing",
+				"-Uri",
+				"http://localhost:8080/api/auth/register",
+				"-Method",
+				"POST",
+				"-ContentType",
+				"application/json",
+				"-Body",
+				"{}",
+				"-TimeoutSec",
+				"5"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Read harmless API validation response",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-File",
+				".probe-response.ps1"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Verify vehicle form change",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-File",
+				".verify-frontend.ps1"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Verify API error handling",
+			"type": "shell",
+			"command": "mvn",
+			"args": [
+				"-f",
+				"backend/pom.xml",
+				"test"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}
