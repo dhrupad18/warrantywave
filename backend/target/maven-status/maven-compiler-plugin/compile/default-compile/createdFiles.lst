@@ -3,9 +3,7 @@ com\warrantywave\WarrantyWaveProperties$Rate.class
 com\warrantywave\WarrantyWaveProperties.class
 com\warrantywave\WarrantyWaveApplication.class
 com\warrantywave\repository\WarrantyPlanRepository.class
-com\warrantywave\SecurityConfiguration.class
 com\warrantywave\repository\FinanceApplicationRepository.class
-com\warrantywave\service\JwtService.class
 com\warrantywave\model\WarrantyStatus.class
 com\warrantywave\model\Vehicle.class
 com\warrantywave\model\RiskBand.class
@@ -34,7 +32,6 @@ com\warrantywave\model\CreditDecision.class
 com\warrantywave\repository\CreditAssessmentRepository.class
 com\warrantywave\admin\AdminReviewController.class
 com\warrantywave\model\ContractStatus.class
-com\warrantywave\JwtAuthenticationFilter.class
 com\warrantywave\model\CreditAssessment.class
 com\warrantywave\service\FinanceContractService.class
 com\warrantywave\repository\WarrantyClaimRepository.class

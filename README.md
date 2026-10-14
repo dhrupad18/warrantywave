@@ -22,14 +22,18 @@ $env:ADMIN_PASSWORD = 'change-this-admin-password'
 mvn -f backend/pom.xml spring-boot:run
 ```
 
-The configured admin is created only when both admin environment variables are set and that email does not already exist. Public registration always creates a `CUSTOMER` account. The API listens on `http://localhost:8080`.
+For repeat local starts, copy `.env.example` to `.env`, set the datasource and admin values, and run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\backend\start-local.ps1`. The execution policy override applies only to this PowerShell process. The script loads the ignored `.env` file into the backend process so the JWT key stays stable between restarts. Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` to provision the initial admin account; an existing account's password is not reset on restart.
+
+The configured admin is created only when both admin environment variables are set and that email does not already exist. Admin accounts cannot be created through the public registration screen. Sign in with the **Admin** account type and the separately provisioned admin email and password. Customer and dealer sign-in are separate; dealer self-registration creates a `DEALER` account, while customer registration creates a `CUSTOMER` account. The selected account type is checked against the authenticated account role.
+
+The dealer workspace includes interactive loan and lease payment illustrations for inventory vehicles. These are estimates only and do not create credit applications or record an approval. The admin workspace lists customer finance requests and warranty claims for staff review. Only admins and the existing authorized staff roles can record decisions through the API.
 
 In another terminal:
 
 ```powershell
 cd frontend
 npm install
-npm start
+npm.cmd start
 ```
 
 The Angular dev server listens on `http://localhost:4200` and proxies `/api` to the backend. The application uses MySQL in all environments; no in-memory database is included.

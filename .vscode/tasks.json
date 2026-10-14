@@ -100,6 +100,60 @@
 			],
 			"isBackground": false,
 			"problemMatcher": []
+		},
+		{
+			"label": "Patch Angular security dependencies",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"--prefix",
+				"frontend",
+				"install",
+				"@angular/animations@^20.3.32",
+				"@angular/common@^20.3.32",
+				"@angular/compiler@^20.3.32",
+				"@angular/core@^20.3.32",
+				"@angular/forms@^20.3.32",
+				"@angular/platform-browser@^20.3.32",
+				"@angular/platform-browser-dynamic@^20.3.32",
+				"@angular/router@^20.3.32",
+				"@angular/cli@^20",
+				"@angular-devkit/build-angular@^20",
+				"@angular/compiler-cli@^20",
+				"rxjs@^7.8.0",
+				"zone.js@~0.15.0",
+				"typescript@~5.9.3"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Build WarrantyWave frontend",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"--prefix",
+				"frontend",
+				"run",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Test WarrantyWave frontend",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"--prefix",
+				"frontend",
+				"test",
+				"--",
+				"--watch=false",
+				"--browsers=ChromeHeadless"
+			],
+			"isBackground": false,
+			"problemMatcher": []
 		}
 	]
 }

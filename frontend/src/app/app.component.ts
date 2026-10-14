@@ -22,15 +22,17 @@ interface Installment { id: number; applicationId: number; installmentNo: number
 })
 export class AppComponent implements OnInit {
   private readonly api = inject(ApiService);
-  readonly sections: { id: Section; label: string; key: string }[] = [
+  private readonly customerSections: { id: Section; label: string; key: string }[] = [
     { id: 'overview', label: 'Overview', key: '01' },
     { id: 'claims', label: 'Warranty claims', key: '02' },
     { id: 'finance', label: 'Vehicle finance', key: '03' },
     { id: 'garage', label: 'My vehicles', key: '04' }
   ];
+  readonly sections: { id: Section; label: string; key: string }[] = [...this.customerSections];
   section: Section = 'overview';
   readonly maxVehicleYear = new Date().getFullYear() + 1;
   authMode: 'login' | 'register' = 'login';
+  accountType: 'CUSTOMER' | 'DEALER' | 'ADMIN' = 'CUSTOMER';
   user: SessionUser | null = null;
   loading = false;
   busy = false;
@@ -48,12 +50,15 @@ export class AppComponent implements OnInit {
   selectedWarrantyPlanId: number | null = null;
   claimForm = { warrantyId: 0, part: '', description: '', costEstimate: 0 };
   financeForm = { vehicleId: 0, type: 'LOAN', vehiclePrice: 25000, downPayment: 3000, tenureMonths: 48, monthlyIncome: 5000, existingEmi: 0, bureauScore: 720, incomeStable: true };
+  quoteForm = { vehicleId: 0, type: 'LOAN' as 'LOAN' | 'LEASE', vehiclePrice: 32000, downPayment: 4000, tenureMonths: 48, annualRate: 8.5, residualPercent: 55 };
+  dealerQuoteCount = 0;
 
   async ngOnInit(): Promise<void> {
     if (!localStorage.getItem('ww_token')) return;
     this.loading = true;
     try {
       this.user = await firstValueFrom(this.api.get<SessionUser>('/auth/me'));
+      this.setWorkspaceSections();
       await this.refresh();
     } catch (error) {
       const status = (error as { status?: number } | null)?.status;
@@ -69,13 +74,16 @@ export class AppComponent implements OnInit {
     this.busy = true;
     const mode = this.authMode;
     try {
-      const endpoint = mode === 'register' ? '/auth/register' : '/auth/login';
+      const endpoint = mode === 'register'
+        ? (this.accountType === 'DEALER' ? '/auth/register/dealer' : '/auth/register')
+        : '/auth/login';
       const payload = mode === 'register'
         ? { ...this.credentials, name: this.credentials.name.trim(), email: this.credentials.email.trim() }
-        : { ...this.credentials, email: this.credentials.email.trim() };
+        : { ...this.credentials, email: this.credentials.email.trim(), accountType: this.accountType };
       const session = await firstValueFrom(this.api.post<SessionUser>(endpoint, payload));
       localStorage.setItem('ww_token', session.token);
       this.user = session;
+      this.setWorkspaceSections();
       await this.refresh();
       this.notice = mode === 'register' ? 'Your account is ready.' : 'Welcome back.';
     } catch (error) {
@@ -94,6 +102,7 @@ export class AppComponent implements OnInit {
     this.applications = [];
     this.installments = [];
     this.section = 'overview';
+    this.setWorkspaceSections();
   }
 
   async refresh(): Promise<void> {
@@ -196,11 +205,59 @@ export class AppComponent implements OnInit {
 
   canReviewClaims(): boolean { return ['ADJUSTER', 'ADMIN'].includes(this.user?.role ?? ''); }
   canReviewFinance(): boolean { return ['CREDIT_OFFICER', 'ADMIN'].includes(this.user?.role ?? ''); }
+  get isAdmin(): boolean { return this.user?.role === 'ADMIN'; }
+  get isDealer(): boolean { return this.user?.role === 'DEALER'; }
+  get pendingFinanceCount(): number { return this.applications.filter(item => item.status === 'MANUAL_REVIEW').length; }
+  get pendingFinanceApplications(): FinanceApplication[] { return this.applications.filter(item => item.status === 'MANUAL_REVIEW'); }
+  get quoteAmountFinanced(): number { return Math.max(0, Number(this.quoteForm.vehiclePrice || 0) - Number(this.quoteForm.downPayment || 0)); }
+  selectQuoteType(type: 'LOAN' | 'LEASE'): void { this.quoteForm.type = type; }
+  get quoteMonthlyEstimate(): number {
+    const principal = this.quoteAmountFinanced;
+    const months = Math.max(1, this.quoteForm.tenureMonths);
+    const monthlyRate = Math.max(0, this.quoteForm.annualRate) / 1200;
+    if (this.quoteForm.type === 'LEASE') {
+      const residual = Math.max(0, this.quoteForm.vehiclePrice * this.quoteForm.residualPercent / 100);
+      return Math.max(0, (principal - residual) / months + (principal + residual) * monthlyRate);
+    }
+    if (!monthlyRate) return principal / months;
+    const factor = Math.pow(1 + monthlyRate, months);
+    return principal * monthlyRate * factor / (factor - 1);
+  }
+  saveDealerQuote(): void {
+    this.dealerQuoteCount++;
+    this.notice = 'Finance illustration added to this session.';
+    this.error = '';
+  }
   openSection(section: Section): void { this.section = section; this.clearMessages(); }
   get pendingClaimCount(): number { return this.claims.filter(claim => ['SUBMITTED', 'UNDER_REVIEW'].includes(claim.status)).length; }
   get nextInstallment(): Installment | undefined { return this.installments.find(item => item.status !== 'PAID'); }
   sectionLabel(sectionId: Section): string | undefined {
     return this.sections.find(item => item.id === sectionId)?.label;
+  }
+
+  selectAccountType(type: 'CUSTOMER' | 'DEALER' | 'ADMIN'): void {
+    this.accountType = type;
+    if (type === 'ADMIN') this.authMode = 'login';
+    this.clearMessages();
+  }
+
+  private setWorkspaceSections(): void {
+    const role = this.user?.role;
+    const items = role === 'ADMIN'
+      ? [
+          { id: 'overview' as Section, label: 'Admin overview', key: '01' },
+          { id: 'finance' as Section, label: 'Loan & lease review', key: '02' },
+          { id: 'claims' as Section, label: 'Claims review', key: '03' }
+        ]
+      : role === 'DEALER'
+        ? [
+            { id: 'overview' as Section, label: 'Dealer desk', key: '01' },
+            { id: 'finance' as Section, label: 'Loan & lease tools', key: '02' },
+            { id: 'garage' as Section, label: 'Dealer vehicles', key: '03' }
+          ]
+        : this.customerSections;
+    this.sections.splice(0, this.sections.length, ...items);
+    if (!items.some(item => item.id === this.section)) this.section = 'overview';
   }
 
   isVehicleProtected(vehicleId: number): boolean {

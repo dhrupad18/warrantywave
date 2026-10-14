@@ -5,7 +5,7 @@ import com.warrantywave.dto.LoginRequest;
 import com.warrantywave.model.UserAccount;
 import com.warrantywave.model.UserRole;
 import com.warrantywave.repository.UserAccountRepository;
-import com.warrantywave.service.JwtService;
+import com.warrantywave.security.JwtService;
 import jakarta.validation.Valid;
 import java.util.Map;
 import java.util.Locale;
@@ -34,12 +34,21 @@ public class AuthController {
 
     @PostMapping("/register")
     public Map<String, Object> register(@Valid @RequestBody Credentials credentials) {
+        return register(credentials, UserRole.CUSTOMER);
+    }
+
+    @PostMapping("/register/dealer")
+    public Map<String, Object> registerDealer(@Valid @RequestBody Credentials credentials) {
+        return register(credentials, UserRole.DEALER);
+    }
+
+    private Map<String, Object> register(Credentials credentials, UserRole role) {
         String email = credentials.email().trim().toLowerCase(Locale.ROOT);
         if (users.existsByEmail(email)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "An account with this email already exists");
         }
         UserAccount user = users.save(new UserAccount(credentials.name().trim(), email,
-            passwordEncoder.encode(credentials.password()), UserRole.CUSTOMER));
+            passwordEncoder.encode(credentials.password()), role));
         return session(user);
     }
 
@@ -48,6 +57,9 @@ public class AuthController {
         UserAccount user = users.findByEmail(credentials.email().trim().toLowerCase(Locale.ROOT))
             .filter(account -> passwordEncoder.matches(credentials.password(), account.passwordHash))
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password"));
+        if (credentials.accountType() != null && user.role != credentials.accountType()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "These credentials do not match the selected account type");
+        }
         return session(user);
     }
 

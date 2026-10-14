@@ -2,6 +2,9 @@ package com.warrantywave.controller;
 
 import java.util.Map;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -12,6 +15,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, String>> handleValidation(MethodArgumentNotValidException exception) {
         String detail = exception.getBindingResult().getFieldErrors().stream()
@@ -31,5 +36,18 @@ public class ApiExceptionHandler {
     public ResponseEntity<Map<String, String>> handleResponseStatus(ResponseStatusException exception) {
         String detail = exception.getReason() != null ? exception.getReason() : exception.getStatusCode().toString();
         return ResponseEntity.status(exception.getStatusCode()).body(Map.of("detail", detail));
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<Map<String, String>> handleDataIntegrityViolation() {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(Map.of("detail", "The requested change conflicts with existing data."));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Map<String, String>> handleUnexpected(Exception exception) {
+        log.error("Unhandled API exception of type {}", exception.getClass().getName());
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+            .body(Map.of("detail", "An unexpected server error occurred."));
     }
 }

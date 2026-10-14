@@ -1,8 +1,6 @@
-package com.warrantywave;
+package com.warrantywave.security;
 
 import com.warrantywave.repository.UserAccountRepository;
-import com.warrantywave.service.JwtService;
-
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

@@ -4,12 +4,8 @@ import com.warrantywave.*;
 import com.warrantywave.dto.*;
 import com.warrantywave.model.*;
 import com.warrantywave.repository.*;
-import com.warrantywave.service.FinanceContractService;
 import jakarta.validation.Valid;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 import org.springframework.http.HttpStatus;
@@ -36,16 +32,13 @@ public class WorkflowController {
     private final CreditAssessmentRepository assessments;
     private final FinanceContractRepository contracts;
     private final EmiScheduleRepository schedules;
-    private final PaymentRepository payments;
     private final WarrantyWaveProperties properties;
-    private final FinanceContractService financeContractService;
 
     public WorkflowController(UserAccountRepository users, VehicleRepository vehicles, WarrantyPlanRepository plans,
                               VehicleWarrantyRepository warranties, WarrantyClaimRepository claims,
                               FinanceApplicationRepository applications, CreditAssessmentRepository assessments,
                               FinanceContractRepository contracts, EmiScheduleRepository schedules,
-                              PaymentRepository payments, WarrantyWaveProperties properties,
-                              FinanceContractService financeContractService) {
+                              WarrantyWaveProperties properties) {
         this.users = users;
         this.vehicles = vehicles;
         this.plans = plans;
@@ -55,9 +48,7 @@ public class WorkflowController {
         this.assessments = assessments;
         this.contracts = contracts;
         this.schedules = schedules;
-        this.payments = payments;
         this.properties = properties;
-        this.financeContractService = financeContractService;
     }
 
     @GetMapping("/vehicles")
@@ -123,7 +114,7 @@ public class WorkflowController {
     @PostMapping("/claims")
     @Transactional
     public ClaimView submitClaim(Authentication auth, @Valid @RequestBody ClaimRequest request) {
-        VehicleWarranty warranty = warranties.findById(request.warrantyId()).filter(item -> item.vehicle.owner.email.equals(auth.getName()))
+        VehicleWarranty warranty = warranties.findByIdAndVehicleOwnerEmail(request.warrantyId(), auth.getName())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Warranty not found"));
         LocalDate today = LocalDate.now();
         boolean inTerm = warranty.status == WarrantyStatus.ACTIVE && !today.isBefore(warranty.startDate) && !today.isAfter(warranty.endDate);
@@ -175,8 +166,6 @@ public class WorkflowController {
         int score = properties.getCredit().getBaseScore() + (int) Math.round(request.bureauScore() * 0.5)
             + (request.incomeStable() ? 80 : 0) + (obligationsRatio <= 0.30 ? 100 : obligationsRatio <= 0.45 ? 50 : 0);
         score = Math.max(300, Math.min(850, score));
-        CreditDecision decision = score >= properties.getCredit().getApproveThreshold() ? CreditDecision.APPROVE
-            : score >= properties.getCredit().getReviewThreshold() ? CreditDecision.REVIEW : CreditDecision.REJECT;
         RiskBand riskBand = score >= properties.getCredit().getApproveThreshold() ? RiskBand.A
             : score >= properties.getCredit().getReviewThreshold() ? RiskBand.B : RiskBand.C;
         double annualRate = riskBand == RiskBand.A ? properties.getRate().getBandA()
@@ -184,20 +173,18 @@ public class WorkflowController {
         String reasons = "Bureau contribution: " + request.bureauScore() + " x 0.5; stable income: "
             + (request.incomeStable() ? "+80" : "+0") + "; existing EMI ratio: "
             + String.format(Locale.ROOT, "%.0f%%", obligationsRatio * 100) + (obligationsRatio <= 0.30 ? " (+100)" : obligationsRatio <= 0.45 ? " (+50)" : " (+0)");
-        application.status = decision == CreditDecision.APPROVE ? ApplicationStatus.APPROVED
-            : decision == CreditDecision.REVIEW ? ApplicationStatus.MANUAL_REVIEW : ApplicationStatus.REJECTED;
-        application.decisionNote = reasons;
+        application.status = ApplicationStatus.MANUAL_REVIEW;
+        application.decisionNote = "Preliminary estimate from self-reported inputs; manual verification is required before a lending decision. " + reasons;
         application = applications.save(application);
 
         CreditAssessment assessment = new CreditAssessment();
         assessment.application = application;
         assessment.score = score;
         assessment.riskBand = riskBand;
-        assessment.decision = decision;
+        assessment.decision = CreditDecision.REVIEW;
         assessment.annualRate = annualRate;
         assessment.reasons = reasons;
         assessments.save(assessment);
-        if (decision == CreditDecision.APPROVE) financeContractService.createContract(application, annualRate);
         return financeView(application);
     }
 
@@ -208,24 +195,9 @@ public class WorkflowController {
     }
 
     @PostMapping("/finance/installments/{id}/pay")
-    @Transactional
     public EmiView payInstallment(Authentication auth, @PathVariable Long id) {
-        EmiSchedule emi = schedules.findById(id).filter(item -> item.contract.application.customer.email.equals(auth.getName()))
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Installment not found"));
-        if (emi.status == EmiStatus.PAID || payments.existsByEmiId(emi.id))
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Installment is already paid");
-        if (emi.dueDate.isBefore(LocalDate.now()) && (emi.lateFee == null || emi.lateFee.signum() == 0)) {
-            emi.lateFee = emi.emiAmount.multiply(BigDecimal.valueOf(properties.getLateFeePercent()).movePointLeft(2)).setScale(2, RoundingMode.HALF_UP);
-            emi.status = EmiStatus.OVERDUE;
-        }
-        Payment payment = new Payment();
-        payment.emi = emi;
-        payment.amount = emi.emiAmount.add(emi.lateFee == null ? BigDecimal.ZERO : emi.lateFee);
-        payment.paidAt = LocalDateTime.now();
-        payments.save(payment);
-        emi.status = EmiStatus.PAID;
-        emi.paidAt = LocalDate.now();
-        return emiView(emi);
+        throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED,
+            "Payment processing is not configured; the installment was not marked as paid.");
     }
 
     private FinanceView financeView(FinanceApplication application) {
@@ -238,7 +210,7 @@ public class WorkflowController {
     }
 
     private UserAccount user(String email) { return users.findByEmail(email).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found")); }
-    private Vehicle ownedVehicle(Long id, String email) { return vehicles.findById(id).filter(item -> item.owner.email.equals(email)).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Vehicle not found")); }
+    private Vehicle ownedVehicle(Long id, String email) { return vehicles.findByIdAndOwnerEmail(id, email).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Vehicle not found")); }
     private boolean hasRole(Authentication auth, UserRole... roles) {
         return auth.getAuthorities().stream().map(GrantedAuthority::getAuthority)
             .anyMatch(authority -> List.of(roles).stream().anyMatch(role -> authority.equals("ROLE_" + role.name())));

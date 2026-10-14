@@ -1,7 +1,7 @@
-package com.warrantywave.service;
+package com.warrantywave.security;
 
-import com.warrantywave.model.UserAccount;
 import com.warrantywave.WarrantyWaveProperties;
+import com.warrantywave.model.UserAccount;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
@@ -17,7 +17,15 @@ public class JwtService {
 
     public JwtService(WarrantyWaveProperties properties) {
         this.properties = properties;
-        this.signingKey = Keys.hmacShaKeyFor(properties.getJwt().getSecret().getBytes(StandardCharsets.UTF_8));
+        String configuredSecret = properties.getJwt().getSecret();
+        if (configuredSecret == null || configuredSecret.isBlank()) {
+            throw new IllegalStateException("JWT_SECRET must be configured");
+        }
+        byte[] secret = configuredSecret.getBytes(StandardCharsets.UTF_8);
+        if (secret.length < 32) {
+            throw new IllegalStateException("JWT_SECRET must contain at least 32 UTF-8 bytes");
+        }
+        this.signingKey = Keys.hmacShaKeyFor(secret);
     }
 
     public String createToken(UserAccount user) {
